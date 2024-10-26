@@ -1,8 +1,7 @@
 from matplotlib import pyplot as plt
 from pyEnergy.check import import_transformer_data
-from pyEnergy.compute import z_score
-from pyEnergy.feature_computer import compute_features
-from pyEnergy.core import extract_monotype_events, find_all_events
+from pyEnergy.compute import standard, normalize
+from pyEnergy.core import compute_features, extract_monotype_events, find_all_events
 from pyEnergy.feature_selector import filter_based_selection, pca_based_selection, correlation_based_selection
 import pandas as pd
 
@@ -20,8 +19,7 @@ feature_info = [
     'std. phase B current(ss)', 
     'ave. phase B current(ss)', 
     'trend phase B current(ss)', 
-    'max. phase B current(tr)',
-    ''
+    'max. phase B current(tr)'
 ]
 
 param_feature_dict = {
@@ -54,7 +52,7 @@ class Fool:
         - selection_params (dict): 特征选择的参数，例如 {'threshold': 0.1} 用于过滤法。
         """
         if normal == True:
-            self.feature = z_score(self.feature)
+            self.feature = normalize(self.feature)
 
         feature = self.feature
         feature_info = self.feature_info
@@ -73,12 +71,13 @@ class Fool:
 
 
 #Other Func
-def initialize_with_feature_selector(csv, remove_feature=[], select_feature=None, method=None, selection_params={}, normal=True, drought=False):
+def initialize_with_feature_selector(csv, remove_feature=[], select_feature=None, method=None, selection_params={}, normal=True):
     """
     初始化函数，加载数据并进行特征提取和选择。
     - method (str): 特征选择方法，可选 'filter', 'pca', 'correlation' 或 None。
     - selection_params (dict): 特征选择的参数，例如 {'threshold': 0.1} 用于过滤法。
     """
+    global feature_info
     # 导入并预处理数据
     df = import_transformer_data(csv)
     event_all, _ = find_all_events(df)
@@ -86,11 +85,10 @@ def initialize_with_feature_selector(csv, remove_feature=[], select_feature=None
     fool = Fool()
 
     monotype_event, idx_monotype_event, other_event = extract_monotype_events(event_all)
-    feature, _ = compute_features(monotype_event, drought)
-    feature_info = feature.columns.to_list()
+    feature, _ = compute_features(monotype_event)
     fool.feature_backup = feature.copy()
     if normal == True:
-        feature = z_score(feature)
+        feature = standard(feature)
     # 移除指定特征
     for feature_ in remove_feature:
         feature_info.remove(feature_)
@@ -113,7 +111,7 @@ def initialize_with_feature_selector(csv, remove_feature=[], select_feature=None
     fool.param_feature_dict = param_feature_dict
     return fool
 
-def initialize(csv, normal=True, drought=False):
+def initialize(csv, normal=True):
     """
     初始化函数，加载数据并进行特征提取。
     """
@@ -124,10 +122,10 @@ def initialize(csv, normal=True, drought=False):
     event_all, _ = find_all_events(df)
 
     monotype_event, idx_monotype_event, other_event = extract_monotype_events(event_all)
-    feature, _ = compute_features(monotype_event, drought)
+    feature, _ = compute_features(monotype_event)
     fool.feature_backup = feature
     if normal:
-        feature = z_score(feature)
+        feature = standard(feature)
 
     # 创建 Fool 对象并保存提取的特征和事件
     

@@ -10,7 +10,7 @@ def calc_dominant_bin(inArray, bin_interval):
 
     return dominant_bin
 
-def z_score(data):
+def standard(data):
     df = pd.DataFrame(data)
     mean = df.mean()
     std = df.std()
@@ -20,7 +20,7 @@ def z_score(data):
 
     return df_standardized
 
-def min_max(data):
+def normalize(data):
     df = pd.DataFrame(data)
     max = df.max()
     min = df.min()
