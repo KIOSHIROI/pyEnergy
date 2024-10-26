@@ -63,21 +63,6 @@ def draw_signal(data, param_str="curnt_B", ax=None):
     if ax == None:
         plt.show()
 
-def draw_signal_series(signal, ax=None):
-    if ax == None:
-        fig, ax1 = plt.subplots()
-    ax1.fill_between(signal.index, 0, signal, color='#6be6d0', alpha=0.7, edgecolor='#717373', linewidth=1)
-    ax1.set_facecolor("#f4f4f4")
-    ax1.grid(True)
-    date_ticks = pd.to_datetime(signal.index)
-    # 计算刻度间隔，每隔约10%的数据设置一个刻度
-    tick_interval = max(1, len(date_ticks) // 10)  # 确保tick_interval为正数
-    ax1.set_xticks(date_ticks[::tick_interval])
-    ax1.set_xticklabels([dt.strftime('%H:%M') for dt in date_ticks[::tick_interval]], rotation=30)
-    ax1.set_ylim((0, signal.max()+0.1*(signal.max()-signal.min())))
-    ax1.set_title(date_ticks[::tick_interval][0].strftime('%Y-%m-%d'), fontdict={"fontsize": 20})
-    if ax == None:
-        plt.show()
 
 def draw_silhouette_scores(max_clusters, silhouette_scores):
     plt.figure(figsize=(10, 6))
