@@ -8,6 +8,25 @@ from pyEnergy import drawer
 from scipy.ndimage import gaussian_filter
 import pywt
 
+def my_reduce(signal, threshold=1, delta=1):
+    step = 3
+    window = 5
+    for i in range(0, len(signal), 1):
+        if len(signal) - i < 3: 
+            break
+        if np.abs(signal[i+2] - signal[i]) < threshold and np.abs(signal[i+2] + signal[i] - 2*signal[i+1]) > delta:
+            signal[i+1] = signal[i] + (signal[i+2] - signal[i]) / 2
+
+    for i in range(0, len(signal), 1):
+        if len(signal) - i < 4: 
+            break
+        if np.abs(signal[i+3] - signal[i]) < threshold and np.abs(signal[i+3] + signal[i] - (signal[i+1]+signal[i+2])/2) > delta:
+            signal[i+1] = signal[i] + (signal[i+3] - signal[i]) / 2
+            signal[i+2] = signal[i] + (signal[i+3] - signal[i]) / 2
+    return signal
+
+
+
 def moving_average(signal, window_size=5):
     return np.convolve(signal, np.ones(window_size)/window_size, mode='valid')
 
@@ -104,6 +123,10 @@ def signal_composition(fool, event_param, feature_param, reduce=None, reduce_par
             level = reduce_params.get("level", None)
 
             signal = wavelet_smoothing(signal, wavelet, level, threshold)
+        elif reduce == "my":
+            delta = reduce_params.get("delta", 1)
+            threshold = reduce_params.get("threshold", 1)
+            signal = my_reduce(signal, threshold, delta)
         if plot_original == True:
             drawer.draw_signal(event, event_param)  
 
