@@ -1,11 +1,9 @@
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 import numpy as np
 import seaborn as sns
-from matplotlib.patches import Rectangle
-# 假设 feature_standardized 是你的 DataFrame，并且已经包含了标准化后的数据
-# 我们绘制前三个特征的三维散点图
+
+
 def draw_3D_scatter(feature_standardized, feature_info):
     df = feature_standardized.iloc[:, :3] 
     fig = plt.figure()
@@ -88,11 +86,6 @@ def draw_silhouette_scores(max_clusters, silhouette_scores):
     plt.grid(True)
     plt.show()
 
-import matplotlib.pyplot as plt
-import pandas as pd
-
-import matplotlib.pyplot as plt
-import pandas as pd
 
 def draw_parallel_coordinates(data, y_pred, colormap="Set1"):
     data = data.copy()
@@ -120,7 +113,7 @@ def draw_parallel_coordinates(data, y_pred, colormap="Set1"):
 
 
 def plot_continuous_lines(original_signals, reconstruct_signals, x_values=None):
-    fig, ax = plt.subplots(1,1, figsize=(10, 4))
+    fig, ax = plt.subplots(1,1, figsize=(10, 3))
     if x_values is None:
         x_values = np.linspace(0, 1, len(reconstruct_signals))
     ax.set_ylim((0, original_signals.max()+0.1*(original_signals.max()-original_signals.min())))
@@ -148,36 +141,53 @@ def plot_continuous_lines(original_signals, reconstruct_signals, x_values=None):
     ax.legend()
     return fig
 
-def plot_running_time(n_clusters, sols, cmap="viridis", n_color=15, color_reverse=False):
-    cmap = plt.get_cmap(cmap)
-    colors = cmap(np.linspace(0, 1, n_color))
-    if color_reverse:
-        colors = list(reversed(colors))
+def plot_div_signal(sols, paramPerCluster, color='blue', x_values=None):
+    n_clusters = len(sols[0])
+    sols = np.array(sols)
+    x_lim = len(sols)
+    sols = sols * np.array(paramPerCluster.reshape(1,n_clusters))
+    sols = sols.T
     fig,axes = plt.subplots(n_clusters, 1, figsize=(10, n_clusters))
-    legends = [Rectangle((0.4, 0.4), 0.2, 0.2, facecolor=colors[i]) for i in range(n_color)]
-    legend_labels = list(map(str, range(1, n_color+1)))
-    fig.legend(legends, legend_labels)
     for i, ax in enumerate(axes):
+        top = sols[i].max()
         ax.set_ylabel("C{}".format(i + 1)) 
-        ax.set_xlim(0, len(sols))
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.set_ylim((0,1))
+        # ax.set_xlim(0, x_lim)
+        ax.set_ylim((0, top*1.1+0.5))
 
-    for i, sol in enumerate(sols):
-        for j, ax in enumerate(axes):
-            if sol[j] > 0:
-                ax.fill_betweenx([0,1], i, i+1, color=colors[sol[j]-1])
-
+        for i, ax in enumerate(axes):
+            ax.plot(x_values, sols[i], color=color)
     return fig
 
-def draw_continue_line_and_running_time(signals, reconstruct_signals, n_clusters, sols, x_values=None, 
-                                        cmap="summer", n_color=10, color_reverse=False, 
-                                        save=None, plot=True):
+def draw_result(signals, reconstruct_signals,  sols, params_perCluster, x_values=None, save=None, plot=True):
     clfig = plot_continuous_lines(signals, reconstruct_signals, x_values=x_values)
-    rtfig = plot_running_time(n_clusters, sols, cmap=cmap, n_color=n_color, color_reverse=color_reverse)
+    dvfig = plot_div_signal(sols, params_perCluster, x_values=x_values)
+    stack = plot_stacked(sols, params_perCluster, x_values=x_values)
     if plot:
         plt.show()
     if save:
         clfig.savefig(save.split(".")[0]+"CL."+save.split(".")[-1])
-        rtfig.savefig(save.split(".")[0]+"RT."+save.split(".")[-1])
+        dvfig.savefig(save.split(".")[0]+"DV."+save.split(".")[-1])
+        stack.savefig(save.split(".")[0]+"stack."+save.splot(".")[-1])
+        
+
+def plot_stacked(sols, paramPerCluster, x_values):
+    n_clusters = len(sols[0])
+    sols = np.array(sols)
+    
+    # 计算每个簇的数值
+    sols = sols * np.array(paramPerCluster.reshape(1, n_clusters))
+    sols = sols.T
+    
+    # 创建面积图
+    x = x_values
+    fig, ax = plt.subplots(figsize=(10, 3))
+    
+    # 绘制堆叠面积图
+    ax.stackplot(x, sols, colors=plt.cm.Blues(np.linspace(0.3, 1, n_clusters)))
+    
+    # 设置标签和标题
+    ax.set_xlabel("Time")
+    ax.set_ylabel("Power")
+    ax.set_title("Stacked Area Plot of Clusters")
+    
+    return fig

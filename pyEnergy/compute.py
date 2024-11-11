@@ -1,14 +1,5 @@
 import numpy as np
 import pandas as pd
-def calc_dominant_bin(inArray, bin_interval):
-    '''
-    计算主导区间中点
-    '''
-    hist, bins = np.histogram(inArray, bins=bin_interval)
-    idx = hist.argmax()
-    dominant_bin = (bins[idx] + bins[idx + 1]) / 2
-
-    return dominant_bin
 
 def z_score(data):
     df = pd.DataFrame(data)

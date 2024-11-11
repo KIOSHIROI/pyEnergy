@@ -1,19 +1,30 @@
-from pyEnergy.cluster import kmeans_elbow1
-from pyEnergy.final import signal_composition
-from pyEnergy.fool import initialize_with_feature_selector
-path = "data/ChangErZhai-40-139079-values 20180101-20181031.csv"
-###* ----------feature selection start------------------
-fool = initialize_with_feature_selector(path, method="corr", 
-                                        selection_params={"n_components": 3, "threshold": 0.65})
-###* ----------feature selection end--------------------
-###* ----------model selection start--------------------
-y_pred = kmeans_elbow1(*fool.features(), plot=False, repeat=50)
-fool.feature["Cluster"]=y_pred
-fool.feature_backup["Cluster"]=y_pred
+import numpy as np
+from pyEnergy.clusters.density import DBSCAN, OPTICS
+from pyEnergy.clusters.kmeans import Kmeans 
+from pyEnergy.composition.composition import Composer
+from pyEnergy.fool import Fool
 
-###* ----------model selection end----------------------
-for j in range(1, 10):
-    #! reduce = "gaussian" | "moving" | "wavelet" | ""
-    reduce = "wavelet"
-    sols, err = signal_composition(fool, event_param="realP_B", feature_param=fool.param_feature_dict["realP"][1], 
-                                   reduce="my", reduce_params={"sigma": 0.3}, index=j, up_bound=None, n_color=7, color_reverse=True)
+path = "data/ChangErZhai-40-139079-values 20180101-20181031.csv"
+print(path)
+fool = Fool(path).select(method='pca', threshold=0.3, n_components=3)
+print("fool init.")
+###! DBSCAN
+# model = DBSCAN(fool)
+# y_pred = model.fit(eps_range=np.arange(0.7,0.8, 0.001), min_samples_range=range(1,3))
+###! HAC
+from pyEnergy.clusters.HAC import HAC
+model = HAC(fool)
+y_pred = model.fit(plot=False)
+# model.plot()
+# print(y_pred)
+composer = Composer(model.fool, y_pred, threshold=1).set_param('realP_B')
+# print('composer init.')
+composer.set_reducer('my2')
+error  = []
+for i in range(0,len(fool.other_event)):
+    _, err = composer.compose(index=i)
+    error.append(err)
+    # composer.plot()
+
+print(np.mean(error))
+

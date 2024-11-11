@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 def find_all_events(df, thre_val=3, thre_time=10,  param_str = 'curnt_B'):
 
     signals = df[param_str].copy()
