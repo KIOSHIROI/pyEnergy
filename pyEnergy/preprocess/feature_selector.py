@@ -9,9 +9,8 @@ def selection(selector):
         'corr': Correlation,
         'remove': Remover
     }
-    for k, v in selectors.items():
-        if selector == k:
-            return v
+    if selectors.get(selector):
+        return selectors[selector]
     raise ValueError("Invalid feature selection method or missing parameters.")
     
 

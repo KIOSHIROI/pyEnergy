@@ -11,9 +11,8 @@ def reduction(reducer):
         'my': MyReducer,
         'my2': MyReducer2
     }
-    for k, v in reducers.items():
-        if reducer == k:
-            return v
+    if reducers.get(reducer):
+        return reducers[reducer]
     raise ValueError("Invalid reducer name or missing parameters.")
     
 class Reducer:
@@ -99,7 +98,7 @@ class MyReducer2(Reducer):
     def reduce(self, signal, **params):
         trigger = params.get("trigger", 3)
         delta = params.get("delta", 1)
-        for i in range(3):
+        for i in range(2):
             for i in range(0, len(signal), 1):
                 if len(signal) - i < 3: 
                     break
@@ -110,4 +109,16 @@ class MyReducer2(Reducer):
                 elif np.abs(signal[i+2] - signal[i]) < delta and np.abs(signal[i+1] - signal[i]) < delta:
                     tmp = (signal[i] + signal[i+1] + signal[i+2]) / 3
                     signal[i], signal[i+1], signal[i+2] = tmp, tmp, tmp
+
+            for i in range(0, len(signal), 1):
+                if len(signal) - i < 4:
+                    break
+                if abs(signal[i] - signal[i+3]) < trigger and abs(signal[i+1] - signal[i]) > trigger and abs(signal[i+1] - signal[i+2]) > trigger:
+                    tmp = (signal[i] + signal[i+3]) / 2
+                    signal[i+1], signal[i+2] = tmp, tmp
+                    
         return np.where(signal > self.threshold, signal, 0), signal
+    
+
+
+

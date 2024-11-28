@@ -16,6 +16,7 @@ class Fool:
         self.feature_backup = feature
         if normal:
             self.feature = z_score(feature)
+        print("fool init.")
 
     def select(self, method, **params):
         selector = selection(method)()
@@ -23,6 +24,7 @@ class Fool:
         feature = pd.DataFrame(selected_features, columns=feature_info)
         self.feature = feature
         self.feature_info = feature_info
+        print("-"*10)
         return self
     def features(self):
         return self.feature, self.feature_info 

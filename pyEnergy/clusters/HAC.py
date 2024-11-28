@@ -7,11 +7,6 @@ class HAC(Model):
         super().__init__(fool)
         self.use(linkage)
         
-    def use(self, linkage="ward"):
+    def use(self, linkage="ward", f="si"):
         self.linkage = linkage
-        self.model = lambda n_clusters, **kwargs: AgglomerativeClustering(n_clusters=n_clusters, linkage=self.linkage)
-
-    def fit(self, **params):
-        self.y_pred, score, n_clusters = self.si(**params)
-        print(f"best_n_clusters: {n_clusters}, score: {score}")
-        return self.y_pred
+        self.model = lambda n_clusters, **kwargs: AgglomerativeClustering(n_clusters, linkage=self.linkage)

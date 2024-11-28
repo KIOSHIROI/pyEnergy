@@ -1,5 +1,5 @@
 import numpy as np
-def find_all_events(df, thre_val=3, thre_time=10,  param_str = 'curnt_B'):
+def find_all_events(df, thre_val=1, thre_time=10,  param_str = 'curnt_B'):
 
     signals = df[param_str].copy()
     idx_invalid = signals < thre_val
@@ -26,7 +26,7 @@ def find_all_events(df, thre_val=3, thre_time=10,  param_str = 'curnt_B'):
 
     return events_all, valid_event_durations
 
-def extract_monotype_events(events_all, thre_val=3, param_str='curnt_B'):
+def extract_monotype_events(events_all, thre_val=1, param_str='curnt_B'):
     """
     将所有有效事件分为“单一类型事件”和其他事件。
     """

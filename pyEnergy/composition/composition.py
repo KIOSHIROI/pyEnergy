@@ -1,8 +1,65 @@
+import time
 import numpy as np
 import pandas as pd
 from pyEnergy import CONST, drawer
 from pyEnergy.composition.reducer import reduction
 from pulp import LpProblem, LpMinimize, LpVariable, lpSum, value, PULP_CBC_CMD
+
+def auto_compose(composer, output_prefix, **params):
+    '''
+    params: (start_idx, end_idx, plot)
+    '''
+    max_num = len(composer.fool.other_event)
+    cluster_num = composer.param_per_c.shape[0]
+    error  = []
+    df_pred = [pd.DataFrame({'UTC Time':[], 'workingPower':[]}) for i in range(cluster_num)]
+
+    start_idx = params.get('start_idx', 0)
+    end_idx = params.get('end_idx', max_num)
+    assert end_idx <= max_num
+    plot = params.get('plot', False)
+    total_start = time.time()
+
+    for i in range(start_idx,end_idx):
+        start = time.time()
+        _, err = composer.compose(index=i)
+        if plot:
+            composer.plot()
+        err = np.mean(err)
+        error.append(err)
+        for j in range(cluster_num):
+            x = composer.x_values
+            signal = composer.pred_signal[j]
+            signal = pd.DataFrame(zip(x, signal), columns=["UTC Time", "workingPower"])
+            df_pred[j] = pd.concat([df_pred[j], signal]).drop_duplicates(subset='UTC Time')
+        # composer.plot()
+        end = time.time()
+        period = end - start
+        minute = period // 60
+        second = period % 60
+        if minute == 0:
+            print(f"--{i+1}/{max_num}--err:{err:.3f}--time:{second:.3f}s--")
+        else:
+            print(f"--{i+1}/{max_num}--err:{err:.3f}--time:{minute}m{second:.3f}s--")
+    total_end = time.time()
+    mean_err = np.mean(error)
+    period = total_end - total_start
+    minute = period // 60
+    second = period % 60
+    if minute == 0:
+        print(f"==total:{max_num}==total me:{mean_err:.3f}==total time:{second:.3f}s==")
+    else:
+        print(f"======total:{max_num}==total me:{mean_err:.3f}==total time:{minute}m{second:.3f}s======")
+
+
+    with open(output_prefix + "_error.csv", "w+", encoding='utf-8') as f:
+        f.write("event_no, mean_error,\n")
+        for i, err in enumerate(error):
+            f.write(f"{i}, {err},\n")
+
+
+    for i in range(cluster_num):
+        df_pred[i].to_csv(output_prefix + f"_signal{i+1}of{cluster_num}.csv")
 
 class Composer():
     def __init__(self, fool, y_pred=None, **params):
@@ -11,6 +68,7 @@ class Composer():
         if y_pred is not None:
             self.fool.feature_backup["Cluster"] = y_pred
         self.param = params.get("param", None)
+        print('composer init.')
         
     def set_param(self, param, fit=True):
         self.param = param
@@ -28,7 +86,7 @@ class Composer():
         
         if fit:
             print("fit=True")
-            thres = 1 if self.param != "realP_B" else 0.5
+            thres = 3 if self.param != "realP_B" else 1
 
             # 进行簇合并迭代
             while len(self.param_per_c) > 1:
@@ -68,6 +126,7 @@ class Composer():
     def set_reducer(self, reducer, reducer_params={}):
         self.reducer = reduction(reducer)(**reducer_params)
         self.reducer_params = reducer_params
+        return self
 
     def compose(self,index=0, fit=True):
         other_events = self.fool.other_event
@@ -103,7 +162,7 @@ def reconstruct_signal(sols, phaseB_perCluster):
     return np.array(reconstructed)
 
 
-def compos(realP_perCluster, signal_reduced, low_bound=0, up_bound=2):
+def compos(realP_perCluster, signal_reduced, low_bound=0, up_bound=6):
     sols = []
     errors = []  # 用于保存每个信号的误差
     n_clusters = len(realP_perCluster)  # 聚类数量
