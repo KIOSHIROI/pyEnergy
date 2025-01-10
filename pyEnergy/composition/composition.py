@@ -65,12 +65,13 @@ class Composer():
     def __init__(self, fool, y_pred=None, **params):
         self.fool = fool
         self.reducer = None
+        self.skip = False
         if y_pred is not None:
             self.fool.feature_backup["Cluster"] = y_pred
         self.param = params.get("param", None)
         print('composer init.')
         
-    def set_param(self, param, fit=True):
+    def set_param(self, param, fit=True, **params):
         self.param = param
         feature_param = CONST.param_feature_dict[self.param][1]
         
@@ -86,7 +87,7 @@ class Composer():
         
         if fit:
             print("fit=True")
-            thres = 3 if self.param != "realP_B" else 1
+            thres = params.get("threshold", 3 if self.param != "realP_B" else 1)
 
             # 进行簇合并迭代
             while len(self.param_per_c) > 1:
@@ -117,7 +118,8 @@ class Composer():
                     cluster_sizes = np.delete(cluster_sizes, idx2, axis=0)
                 else:
                     break
-
+                if self.param_per_c.shape[0] < 2:
+                    self.skip = True
         print("Final cluster means:", self.param_per_c)
         print("-" * 10)
         return self
@@ -128,7 +130,8 @@ class Composer():
         self.reducer_params = reducer_params
         return self
 
-    def compose(self,index=0, fit=True):
+    def compose(self,index=0):
+
         other_events = self.fool.other_event
         idx = index
         event = other_events[idx]
@@ -162,31 +165,45 @@ def reconstruct_signal(sols, phaseB_perCluster):
     return np.array(reconstructed)
 
 
+from pulp import LpProblem, LpMinimize, LpVariable, lpSum, PULP_CBC_CMD, value
+import numpy as np
+from joblib import Parallel, delayed  # 用于并行处理
+
 def compos(realP_perCluster, signal_reduced, low_bound=0, up_bound=6):
     sols = []
-    errors = []  # 用于保存每个信号的误差
-    n_clusters = len(realP_perCluster)  # 聚类数量
+    errors = []
+    n_clusters = len(realP_perCluster)
     
-    for signal in signal_reduced:
-        prob = LpProblem("Signal_Decomposition", LpMinimize)
-        
-        # 定义优化变量
-        x = [LpVariable(f'x_{i}', lowBound=low_bound, upBound=up_bound, cat='Integer') for i in range(n_clusters)]
-        error = LpVariable('error', lowBound=0)
-        
-        # 目标函数：最小化误差和 max_x
-        prob += error - lpSum(x)
-        
-        # 添加约束：线性组合的值必须等于信号加上误差
-        prob += lpSum(realP_perCluster[j] * x[j] for j in range(n_clusters)) + error >= signal
-        prob += lpSum(realP_perCluster[j] * x[j] for j in range(n_clusters)) - error <= signal
+    # 预先计算求和表达式
+    sum_realP_perCluster = np.sum(realP_perCluster, axis=0)
     
+    # 并行处理信号
+    results = Parallel(n_jobs=-1)(delayed(process_signal)(realP_perCluster, signal, sum_realP_perCluster, low_bound, up_bound) for signal in signal_reduced)
+    
+    for result in results:
+        sols.append(result[0])
+        errors.append(result[1])
+    
+    return sols, errors
 
-        # 求解问题
-        prob.solve(PULP_CBC_CMD(msg=False))
-        
-        # 保存最优解和误差
-        sols.append([int(value(x[i])) for i in range(n_clusters)])
-        errors.append(value(error))  # 保存误差值
+def process_signal(realP_perCluster, signal, sum_realP_perCluster, low_bound, up_bound):
+    prob = LpProblem("Signal_Decomposition", LpMinimize)
     
-    return sols, errors  # 返回最优解和误差值
+    # 定义优化变量
+    x = LpVariable.dicts("x", range(len(realP_perCluster)), lowBound=low_bound, upBound=up_bound, cat='Integer')
+    error = LpVariable('error', lowBound=0)
+    
+    # 目标函数：最小化误差和 max_x
+    prob += error - lpSum(x)
+    
+    # 添加约束：线性组合的值必须等于信号加上误差
+    prob += lpSum(realP_perCluster[j] * x[j] for j in range(len(realP_perCluster))) + error >= signal
+    prob += lpSum(realP_perCluster[j] * x[j] for j in range(len(realP_perCluster))) - error <= signal
+
+    # 求解问题
+    prob.solve(PULP_CBC_CMD(msg=False))
+    
+    # 保存最优解和误差
+    solution = [int(value(x[i])) for i in range(len(realP_perCluster))]
+    error_value = value(error)
+    return solution, error_value

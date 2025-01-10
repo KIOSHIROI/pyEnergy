@@ -91,6 +91,7 @@ class Model:
         best_idx = np.argmax(scores)
         if plot:
             draw_silhouette_scores(max_clusters, scores)
+        print(f"分数:{scores[best_idx]}")
         return best_labels[best_idx], scores[best_idx], best_idx + 2
 
 
@@ -141,7 +142,7 @@ class Model:
             plt.ylabel("DB Index")
             plt.grid(True)
             plt.show()
-        
+        print(f"分数:{scores[best_idx]}")    
         return best_labels[best_idx], scores[best_idx], best_idx + 2
     from sklearn.metrics import calinski_harabasz_score
 
@@ -192,7 +193,7 @@ class Model:
             plt.ylabel("CH Index")
             plt.grid(True)
             plt.show()
-
+        print(f"分数:{scores[best_idx]}")
         return best_labels[best_idx], scores[best_idx], best_idx + 2
 
 

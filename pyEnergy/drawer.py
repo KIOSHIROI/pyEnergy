@@ -2,7 +2,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import seaborn as sns
-
+import pyEnergy.CONST as CONST
+import matplotlib.dates as mdates
 
 def draw_3D_scatter(feature_standardized, feature_info):
     df = feature_standardized.iloc[:, :3] 
@@ -191,3 +192,34 @@ def plot_stacked(sols, paramPerCluster, x_values):
     ax.set_title("Stacked Area Plot of Clusters")
     
     return fig
+
+def plot_signal(df_list):
+    datetimeRange_start = CONST.datetimeRange_start
+    datetimeRange_end = CONST.datetimeRange_end
+    fig, axes = plt.subplots(4,2, figsize=(10,8))
+    ax = axes.flatten()
+    for df in df_list:
+        # 遍历日期时间范围
+        for ii in range(len(datetimeRange_end)):
+            a = ax[ii]
+
+            # 绘制Hengyuan数据的面积图
+            a.plot(df, alpha=0.6)
+
+            # 设置图形属性
+    for ii in range(len(datetimeRange_end)):
+        a = ax[ii]
+        a.set_xlim([datetimeRange_start[ii], datetimeRange_end[ii]])
+        a.set_ylabel('Power [kW]')
+        # a.grid(True)
+        a.tick_params(axis="x", labelrotation=30)
+        # 设置x轴的刻度为时间戳
+        a.xaxis.set_major_locator(mdates.AutoDateLocator())
+        a.xaxis.set_major_formatter(mdates.DateFormatter('%Hh/%m/%d/'))
+    plt.tight_layout()
+
+def plot_err(path):
+    err = pd.read_csv(path)
+    plt.plot(err.loc[:, " mean_error"], label="".join(path.split("/")[-1].split('.')[:-1]))
+    plt.legend()
+    
