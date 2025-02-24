@@ -4,6 +4,7 @@ import pandas as pd
 from pyEnergy import CONST, drawer
 from pyEnergy.composition.reducer import reduction
 from pulp import LpProblem, LpMinimize, LpVariable, lpSum, value, PULP_CBC_CMD
+import os  
 
 def auto_compose(composer, output_prefix, **params):
     '''
@@ -32,7 +33,6 @@ def auto_compose(composer, output_prefix, **params):
             signal = composer.pred_signal[j]
             signal = pd.DataFrame(zip(x, signal), columns=["UTC Time", "workingPower"])
             df_pred[j] = pd.concat([df_pred[j], signal]).drop_duplicates(subset='UTC Time')
-        # composer.plot()
         end = time.time()
         period = end - start
         minute = period // 60
@@ -51,16 +51,22 @@ def auto_compose(composer, output_prefix, **params):
     else:
         print(f"======total:{max_num}==total me:{mean_err:.3f}==total time:{minute}m{second:.3f}s======")
 
+    # 确保目标目录存在
+    output_dir = os.path.dirname(output_prefix)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)  # 递归创建目录
 
+    # 写入错误文件
     with open(output_prefix + "_error.csv", "w+", encoding='utf-8') as f:
         f.write("event_no, mean_error,\n")
         for i, err in enumerate(error):
             f.write(f"{i}, {err},\n")
 
-
+    # 写入预测信号文件
     for i in range(cluster_num):
         df_pred[i].to_csv(output_prefix + f"_signal{i+1}of{cluster_num}.csv")
-
+        
+        
 class Composer():
     def __init__(self, fool, y_pred=None, **params):
         self.fool = fool

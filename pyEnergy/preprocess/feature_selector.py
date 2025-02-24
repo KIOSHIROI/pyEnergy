@@ -8,6 +8,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.linear_model import Lasso
 from sklearn.feature_selection import VarianceThreshold
+from sklearn.decomposition import PCA as p
 
 # 扩展的特征选择函数
 def selection(selector):
@@ -197,4 +198,3 @@ class AutoencoderSelector(Selector):
         print("Selected features (Autoencoder-based):", selected_columns)
 
         return encoded_features, selected_columns
-

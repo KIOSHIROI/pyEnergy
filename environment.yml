@@ -13,3 +13,5 @@ dependencies:
   - pip
   - pip:
     - pulp
+    - torch
+    - coincbc>=2.10
