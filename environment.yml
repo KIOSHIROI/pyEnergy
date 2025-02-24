@@ -11,7 +11,7 @@ dependencies:
   - seaborn
   - scipy
   - pip
+  - coincbc
   - pip:
     - pulp
     - torch
-    - coincbc>=2.10

@@ -12,13 +12,14 @@ class TwoStageKMeans(Model):
         
     def fit(self, **params):
         """
-        执行两阶段聚类
+        执行两阶段聚类：
+        1. 首先对功率特征进行聚类
+        2. 对每个功率聚类结果内部使用非功率特征进行二次聚类
         """
         min_samples = params.get("min_samples", 2)
         max_clusters = params.get("max_clusters", min(int(np.ceil(np.sqrt(self.fool.feature.shape[0]))), 20))
         metric = params.get("metric", "euclidean")
         repeats = params.get("repeats", 50)
-        weights = params.get("weights", [1, 0])
         plot = params.get("plot", True)
     
         if hasattr(self.fool, 'power_feature'):
@@ -29,11 +30,13 @@ class TwoStageKMeans(Model):
     
         # 其他特征
         other_features = self.fool.other_features
+        
+        # 第一阶段：对功率特征进行聚类
         power_scores, power_labels = [], []
         for n_clusters in range(2, max_clusters + 1):
             cluster_scores = []
             cluster_labels = []
-            # 对功率特征进行聚类
+            
             def run_single_clustering():
                 model = KMeans(n_clusters=n_clusters, random_state=np.random.randint(0, 10000))
                 labels = model.fit_predict(power_feature)
@@ -58,61 +61,66 @@ class TwoStageKMeans(Model):
             else:
                 power_scores.append(float('-inf'))
                 power_labels.append(None)
+        
+        # 选择最佳的功率特征聚类结果
         best_power_idx = np.argmax(power_scores)
         best_power_labels = power_labels[best_power_idx]
-    
-        # 对其他特征进行聚类
-        final_scores, final_labels = [], []
-        for n_clusters in range(2, max_clusters + 1):
-            cluster_scores = []
-            cluster_labels = []
-    
-            def run_single_clustering():
-                model = KMeans(n_clusters=n_clusters, random_state=np.random.randint(0, 10000))
-                labels = model.fit_predict(other_features)
-                if min(np.bincount(labels)) >= min_samples:  
-                    return labels
-                return None
-    
-            results = Parallel(n_jobs=-1)(
-                delayed(run_single_clustering)() for _ in range(repeats)
-            )
-    
-            for labels in results:
-                if labels is not None:
-                    score = silhouette_score(other_features, labels, metric=metric)
-                    cluster_scores.append(score)
-                    cluster_labels.append(labels)
-    
-            if cluster_scores:
-                best_idx = np.argmax(cluster_scores)
-                final_scores.append(cluster_scores[best_idx])
-                final_labels.append(cluster_labels[best_idx])
-            else:
-                final_scores.append(float('-inf'))
-                final_labels.append(None)
-    
-        # 添加错误处理
-        if all(label is None for label in final_labels):
-            raise ValueError("所有聚类尝试都失败，请调整参数")
-
-        best_final_idx = np.argmax(final_scores)
-        best_final_labels = final_labels[best_final_idx]
-
-        # 可选：结合功率特征和其他特征的聚类结果
-        if best_power_labels is not None and best_final_labels is not None:
-            # 这里可以添加结合两种聚类结果的逻辑
-            pass
-
+        if best_power_labels is None:
+            raise ValueError("功率特征聚类失败，请调整参数")
+        
+        # 第二阶段：对每个功率聚类内部进行非功率特征聚类
+        unique_clusters = np.unique(best_power_labels)
+        final_labels = np.zeros_like(best_power_labels)
+        current_label = 0
+        
+        for cluster in unique_clusters:
+            # 获取当前功率聚类的样本索引
+            cluster_mask = best_power_labels == cluster
+            cluster_features = other_features[cluster_mask]
+            
+            # 对当前功率聚类内的样本进行二次聚类
+            best_score = float('-inf')
+            best_sub_labels = None
+            
+            # 尝试不同的子类数量（包括1，表示不进行二次聚类）
+            max_sub_clusters = min(max_clusters, len(cluster_features))
+            for n_sub_clusters in range(1, max_sub_clusters + 1):
+                if n_sub_clusters == 1:
+                    # 不进行二次聚类，直接使用相同标签
+                    sub_labels = np.zeros(len(cluster_features))
+                    score = 1.0  # 当只有一个类时，设置一个较高的得分
+                else:
+                    # 执行二次聚类
+                    model = KMeans(n_clusters=n_sub_clusters, random_state=np.random.randint(0, 10000))
+                    sub_labels = model.fit_predict(cluster_features)
+                    if min(np.bincount(sub_labels)) >= min_samples:
+                        score = silhouette_score(cluster_features, sub_labels, metric=metric)
+                    else:
+                        continue
+                
+                if score > best_score:
+                    best_score = score
+                    best_sub_labels = sub_labels
+            
+            if best_sub_labels is None:
+                # 如果二次聚类失败，将该功率聚类视为一个整体
+                best_sub_labels = np.zeros(len(cluster_features))
+            
+            # 更新最终标签
+            for sub_label in np.unique(best_sub_labels):
+                mask = cluster_mask.copy()
+                mask[cluster_mask] = best_sub_labels == sub_label
+                final_labels[mask] = current_label
+                current_label += 1
+        
         if plot:
             plt.plot(range(2, max_clusters + 1), power_scores, marker='o', label='Power Feature')
-            plt.plot(range(2, max_clusters + 1), final_scores, marker='o', label='Other Features')
-            plt.title("Silhouette Score vs Number of Clusters")
+            plt.title("Power Feature Clustering Score vs Number of Clusters")
             plt.xlabel("Number of Clusters")
             plt.ylabel("Silhouette Score")
             plt.legend()
             plt.grid(True)
             plt.show()
-    
-        self.y_pred = best_final_labels
-        return self.y_pred, final_scores[best_final_idx], best_final_idx + 2
+        
+        self.y_pred = final_labels
+        return self.y_pred, power_scores[best_power_idx], len(unique_clusters)
