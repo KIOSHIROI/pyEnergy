@@ -193,18 +193,18 @@ def plot_stacked(sols, paramPerCluster, x_values):
     
     return fig
 
-def plot_signal(df_list):
+def plot_signal(df_list, labels = None):
     datetimeRange_start = CONST.datetimeRange_start
     datetimeRange_end = CONST.datetimeRange_end
     fig, axes = plt.subplots(4,2, figsize=(10,8))
     ax = axes.flatten()
-    for df in df_list:
+    for n,  df in enumerate(df_list):
         # 遍历日期时间范围
         for ii in range(len(datetimeRange_end)):
             a = ax[ii]
 
             # 绘制Hengyuan数据的面积图
-            a.plot(df, alpha=0.6)
+            a.plot(df, alpha=0.6, label=labels[n] if labels else None)
 
             # 设置图形属性
     for ii in range(len(datetimeRange_end)):
@@ -216,6 +216,9 @@ def plot_signal(df_list):
         # 设置x轴的刻度为时间戳
         a.xaxis.set_major_locator(mdates.AutoDateLocator())
         a.xaxis.set_major_formatter(mdates.DateFormatter('%Hh/%m/%d/'))
+
+    if labels:
+        a.legend()
     plt.tight_layout()
 
 def plot_err(path):

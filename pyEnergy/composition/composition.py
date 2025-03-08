@@ -57,14 +57,14 @@ def auto_compose(composer, output_prefix, **params):
         os.makedirs(output_dir, exist_ok=True)  # 递归创建目录
 
     # 写入错误文件
-    with open(output_prefix + "_error.csv", "w+", encoding='utf-8') as f:
+    with open(output_prefix + "error.csv", "w+", encoding='utf-8') as f:
         f.write("event_no, mean_error,\n")
         for i, err in enumerate(error):
             f.write(f"{i}, {err},\n")
 
     # 写入预测信号文件
     for i in range(cluster_num):
-        df_pred[i].to_csv(output_prefix + f"_signal{i+1}of{cluster_num}.csv")
+        df_pred[i].to_csv(output_prefix + f"signal{i+1}of{cluster_num}.csv")
         
         
 class Composer():
@@ -175,7 +175,7 @@ from pulp import LpProblem, LpMinimize, LpVariable, lpSum, PULP_CBC_CMD, value
 import numpy as np
 from joblib import Parallel, delayed  # 用于并行处理
 
-def compos(realP_perCluster, signal_reduced, low_bound=0, up_bound=6):
+def compos(realP_perCluster, signal_reduced, low_bound=0, up_bound=8):
     sols = []
     errors = []
     n_clusters = len(realP_perCluster)

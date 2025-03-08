@@ -7,38 +7,47 @@ from pyEnergy.clusters.kmeans import Kmeans
 import pyEnergy.CONST as CONST
 
 class TwoStageCluster:
-    def __init__(self, fool, method='hac', linkage='ward'):
+    def __init__(self, fool, stage1_method='hac', stage2_method=None, linkage='ward'):
         """
         初始化双阶段聚类模型
         
         参数:
             fool: Fool对象，包含特征数据
-            method: str, 聚类方法 ('hac', 'kmeans', 'gaussian')
+            stage1_method: str, 第一阶段聚类方法 ('hac', 'kmeans', 'gaussian')
+            stage2_method: str, 第二阶段聚类方法，如果为None则使用与第一阶段相同的方法
             linkage: str, HAC方法的连接方式
         """
         self.fool = fool
-        self.method = method.lower()
+        self.stage1_method = stage1_method.lower()
+        self.stage2_method = stage2_method.lower() if stage2_method else self.stage1_method
         self.linkage = linkage
         self.y_pred_stage1 = None
         self.y_pred = None
         self.cluster_mapping = {}
         
-        # 选择聚类模型
-        if self.method == 'hac':
-            self.model_class = HAC
-        elif self.method == 'kmeans':
-            self.model_class = Kmeans
-        elif self.method == 'gaussian':
-            self.model_class = Gaussian
-        else:
-            raise ValueError(f"不支持的聚类方法: {method}")
+        # 验证聚类方法的有效性
+        for method in [self.stage1_method, self.stage2_method]:
+            if method not in ['hac', 'kmeans', 'gaussian']:
+                raise ValueError(f"不支持的聚类方法: {method}")
+        
+        # 根据方法名获取对应的模型类
+        self.get_model_class = lambda method: {
+            'hac': HAC,
+            'kmeans': Kmeans,
+            'gaussian': Gaussian
+        }[method]
     
     def _perform_first_stage(self, **params):
         """执行第一阶段聚类（使用功率特征）"""
         logging.info("开始第一阶段聚类（功率特征）...")
         self.fool = self.fool.select("selected", selected_features=CONST.REAL_POWER_FEATURES)
-        model = self.model_class(self.fool)
-        self.y_pred_stage1 = model.fit(**params)
+        model = self.get_model_class(self.stage1_method)(self.fool)
+        y_pred = model.fit(**params)
+        
+        # 确保第一阶段聚类结果是一维数组
+        if isinstance(y_pred, tuple):
+            y_pred = y_pred[0]  # 取第一个元素（标签）
+        self.y_pred_stage1 = np.asarray(y_pred).ravel()
         self.stage1_model = model
         return self.y_pred_stage1
     
@@ -80,12 +89,17 @@ class TwoStageCluster:
                     if sub_fool.feature.empty:
                         raise ValueError(f"簇 {cluster_id} 的特征数据为空")
                     
-                    # 对子簇进行聚类
-                    sub_model = self.model_class(sub_fool)
+                    # 对子簇进行聚类，使用第二阶段的聚类方法
+                    sub_model = self.get_model_class(self.stage2_method)(sub_fool)
                     sub_clusters = sub_model.fit(**params)
                     
                     if sub_clusters is None:
                         raise ValueError(f"簇 {cluster_id} 的聚类失败")
+                    
+                    # 确保聚类结果是一维数组
+                    if isinstance(sub_clusters, tuple):
+                        sub_clusters = sub_clusters[0]  # 取第一个元素（标签）
+                    sub_clusters = np.asarray(sub_clusters).ravel()
                     
                     # 更新簇标签
                     n_subclusters = len(np.unique(sub_clusters))

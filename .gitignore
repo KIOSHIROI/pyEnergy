@@ -37,3 +37,4 @@ htmlcov/
 fool/REAL_POWER_FEATURE_FOOL
 output/
 data/
+*.m

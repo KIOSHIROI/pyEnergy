@@ -12,7 +12,7 @@ def setup_logging():
     os.makedirs(log_dir, exist_ok=True)
     _ = os.path.join(log_dir, f'{datetime.datetime.now().strftime("%Y%m%d")}')
     os.makedirs(_, exist_ok=True)
-    log_file = os.path.join(_, datetime.datetime.now().strftime("%HH%MM%SS") + '.log')
+    log_file = os.path.join(_, datetime.datetime.now().strftime("%H%M%S") + '.log')
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -76,6 +76,10 @@ def compute_mse(df_pred, df_val):
     mse = np.mean(diff**2)
     return mse
 
+def compute_infomation_ratio(df_pred, df_val):
+    n_pred = df_pred.sum().iloc[0]
+    n_val = df_val.sum().iloc[0]
+    return n_val / n_pred
 
 def compute_mae(df_pred, df_val):
     """计算平均绝对误差（MAE）"""
@@ -152,6 +156,7 @@ def evaluate_predictions(dir_path):
             logging.info(f"处理文件 {path}")
             df_pred = interpolation_pred(path, df_val)
 
+            vp_ratio = compute_infomation_ratio(df_pred, df_val)
             inclution = compute_inclution(df_pred, df_val)
             matching = compute_matching(df_pred, df_val)
             time_inclu = compute_time_inclution(df_pred, df_val)
@@ -160,6 +165,7 @@ def evaluate_predictions(dir_path):
 
             result = {
                 'file_name': pred_path,
+                'vp_ratio': vp_ratio,
                 'inclution': inclution * 100,
                 'matching': matching * 100,
                 'time_inclution': time_inclu * 100,
@@ -178,59 +184,6 @@ def evaluate_predictions(dir_path):
     
     return results
 
-def evaluate_and_visualize_folder(folder_path, folder_name):
-    """评估并可视化指定文件夹的结果"""
-    print(f"\n处理文件夹: {folder_name}")
-    logging.info(f"开始处理文件夹: {folder_name}")
-
-    # 处理误差文件
-    error_file = os.path.join(folder_path, f"{folder_name}_error.csv")
-    if os.path.exists(error_file):
-        print("分析误差曲线...")
-        try:
-            dw.plot_err(error_file)
-            try:
-                image_dir = os.path.join(folder_path, 'images')
-                os.makedirs(image_dir, exist_ok=True)
-                plt.savefig(os.path.join(image_dir, 'error_curve.png'))
-            except Exception as e:
-                logging.warning(f"无法保存误差曲线图像 - {folder_name}: {str(e)}")
-                plt.show()
-            finally:
-                plt.close()
-        except Exception as e:
-            logging.error(f"绘制误差曲线失败 - {folder_name}: {str(e)}")
-
-    # 评估分解结果
-    print("评估分解结果...")
-    logging.info(f"开始评估分解结果 - {folder_name}")
-    
-    try:
-        results = evaluate_predictions(folder_path)
-        
-        if not results:
-            logging.warning(f"未找到可评估的信号文件 - {folder_name}")
-            return
-            
-        # 记录评估结果
-        for result in results:
-            logging.info(f"文件 {result['file_name']} 评估结果:")
-            logging.info(f"  - 包含度: {result['inclution']:.3f}%")
-            logging.info(f"  - 匹配度: {result['matching']:.3f}%")
-            logging.info(f"  - 时间包含度: {result['time_inclution']:.3f}%")
-            logging.info(f"  - 时间匹配度: {result['time_matching']:.3f}%")
-            
-            print(f"文件 {result['file_name']}:")
-            print(f"  包含度: {result['inclution']:.3f}%")
-            print(f"  匹配度: {result['matching']:.3f}%")
-            print(f"  时间包含度: {result['time_inclution']:.3f}%")
-            print(f"  时间匹配度: {result['time_matching']:.3f}%")
-            
-    except Exception as e:
-        logging.error(f"评估过程出错 - {folder_name}: {str(e)}")
-        print(f"评估过程出错: {str(e)}")
-
-    logging.info(f"文件夹 {folder_name} 处理完成\n" + "-"*50)
 
 def evaluate_specific_output(output_prefix, img_dir, cluster_params=None):
     """评估特定输出目录的结果"""
@@ -243,16 +196,16 @@ def evaluate_specific_output(output_prefix, img_dir, cluster_params=None):
     except Exception as e:
         logging.warning(f"无法创建输出目录: {str(e)}")
 
-    # 分析误差曲线
-    error_file = os.path.join(output_prefix, 'error', 'error.csv')
-    print("\n分析误差曲线...")
-    if os.path.exists(error_file):
-        try:
-            dw.plot_err(error_file)
-            plt.show()
-            plt.savefig(os.path.join(img_dir, 'error_curve.png'))
-        except Exception as e:
-            logging.error(f"绘制误差曲线失败: {str(e)}")
+    # # 分析误差曲线
+    # error_file = os.path.join(output_prefix, 'error', 'error.csv')
+    # print("\n分析误差曲线...")
+    # if os.path.exists(error_file):
+    #     try:
+    #         dw.plot_err(error_file)
+    #         plt.show()
+    #         plt.savefig(os.path.join(img_dir, 'error_curve.png'))
+    #     except Exception as e:
+    #         logging.error(f"绘制误差曲线失败: {str(e)}")
 
     # 评估分解结果
     print("\n开始评估分解结果...")
@@ -275,9 +228,15 @@ def evaluate_specific_output(output_prefix, img_dir, cluster_params=None):
             
         # 记录评估结果
         logging.info(f"找到 {len(results)} 个有效的评估结果")
-        best_result = min(results, key=lambda x: x['mae'])
+        # score = [np.abs(np.log10(result["vp_ratio"]))/10+ result["active_power_error"]/10 + result["inactive_power_error"]/10 for result in results]
+        score = [result["mse"]/10 for result in results]
+
+        # score = [-result["matching"] for result in results]
+        best_idx = np.argmin(score)
+        best_result = results[best_idx]
         for result in results:
             logging.info(f"文件 {result['file_name']} 评估结果:")
+            logging.info(f"  -vp_ratio: {result['vp_ratio']:.3f}")
             logging.info(f"  - inc: {result['inclution']:.3f}%")
             logging.info(f"  - mat: {result['matching']:.3f}%")
             logging.info(f"  - t_inc: {result['time_inclution']:.3f}%")
@@ -288,16 +247,17 @@ def evaluate_specific_output(output_prefix, img_dir, cluster_params=None):
             logging.info(f"  - mae: {result['mae']:.3f}")
 
         # 输出最佳匹配的信号文件
-        logging.info("\n最佳匹配信号文件评估结果:")
-        logging.info(f"文件名: {best_result['file_name']}")
-        logging.info(f"包含度: {best_result['inclution']:.3f}%")
-        logging.info(f"匹配度: {best_result['matching']:.3f}%")
-        logging.info(f"时间包含度: {best_result['time_inclution']:.3f}%")
-        logging.info(f"时间匹配度: {best_result['time_matching']:.3f}%")
-        logging.info(f"有信号时段平均误差: {best_result['active_power_error']:.3f}")
-        logging.info(f"无信号时段平均误差: {best_result['inactive_power_error']:.3f}")
-        logging.info(f"均方误差(MSE): {best_result['mse']:.3f}")
-        logging.info(f"平均绝对误差(MAE): {best_result['mae']:.3f}")
+        logging.info(f"\n最佳匹配信号No.{best_idx+1}文件评估结果:")
+        logging.info(f"  - vp_ratio: {best_result['vp_ratio']:.3f}")
+        logging.info(f"  - inc: {best_result['inclution']:.3f}%")
+        logging.info(f"  - mat: {best_result['matching']:.3f}%")
+        logging.info(f"  - t_inc: {best_result['time_inclution']:.3f}%")
+        logging.info(f"  - t_mat: {best_result['time_matching']:.3f}%")
+        logging.info(f"  - act_mae: {best_result['active_power_error']:.3f}")
+        logging.info(f"  - inact_mae:: {best_result['inactive_power_error']:.3f}")
+        logging.info(f"  - mse: {best_result['mse']:.3f}")
+        logging.info(f"  - mae: {best_result['mae']:.3f}")
+
             
 
     except Exception as e:

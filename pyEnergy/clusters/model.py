@@ -35,10 +35,11 @@ class Model:
             if self.y_pred is None:
                 raise ValueError("聚类结果无效，可能是由于数据质量问题")
             print(f"best_n_clusters: {n_clusters}, score: {score}")
-            return self.y_pred
+            return self.y_pred, score, n_clusters
         except Exception as e:
             print(f"聚类过程发生错误: {str(e)}")
-            return None
+            return None, 0, 0
+        
 
     def plot(self, plot=True):
         if self.y_pred is not None:
@@ -79,28 +80,42 @@ class Model:
         
                 scores, best_labels = [], []
                 for n_clusters in range(2, max_clusters + 1):
+                    # print(f"n_clusters: {n_clusters}")
                     cluster_scores = []
                     cluster_labels = []
                     
                     def run_single_clustering():
                         model = self.model(n_clusters, random_state=np.random.randint(0, 10000))
                         labels = model.fit_predict(data)
-                        if min(np.bincount(labels)) >= min_samples:  
-                            return labels
-                        return None
+                        unique_labels, counts = np.unique(labels, return_counts=True)
+                        if min(counts) < min_samples:
+                            print(f"    跳过：某些簇的样本数量({min(counts)})小于最小要求({min_samples})")
+                            return None
+                        return labels
                     
                     results = Parallel(n_jobs=-1)(
                         delayed(run_single_clustering)() for _ in range(repeats)
                     )
                     
-                    for labels in results:
-                        if labels is not None:
-                            cluster_scores.append(compute_score(data, labels, weights, metric))
-                            cluster_labels.append(labels)
+                    valid_results = [labels for labels in results if labels is not None]
+                    if not valid_results:
+                        print(f"    警告：当前簇数({n_clusters})下所有尝试都未能产生有效的聚类结果")
+                        scores.append(float('-inf'))
+                        best_labels.append(None)
+                        continue
+                        
+                    cluster_scores = []
+                    cluster_labels = []
+                    for labels in valid_results:
+                        sc = compute_score(data, labels, weights, metric)
+                        cluster_scores.append(sc)
+                        cluster_labels.append(labels)
         
                     if cluster_scores:
                         best_idx = np.argmax(cluster_scores)
-                        scores.append(cluster_scores[best_idx])
+                        sc = cluster_scores[best_idx]
+                        scores.append(sc)
+                        # print(f"分数:{sc}")
                         best_labels.append(cluster_labels[best_idx])
                     else:
                         scores.append(float('-inf'))
@@ -219,3 +234,4 @@ def compute_score(data, labels, weights, metric):
     Scores_std = -np.mean(std_tmp)
     perf_val = weights[0] * Scores_mean + weights[1] * Scores_std 
     return perf_val
+
