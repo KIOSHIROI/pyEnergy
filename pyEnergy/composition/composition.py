@@ -77,7 +77,7 @@ class Composer():
         self.param = params.get("param", None)
         print('composer init.')
         
-    def set_param(self, param, fit=True, **params):
+    def set_param(self, param, fit=False, **params):
         self.param = param
         feature_param = CONST.param_feature_dict[self.param][1]
         
@@ -158,17 +158,17 @@ class Composer():
         sols = sols.T
         self.pred_signal = sols
     
-    def plot(self, plot=True, save_path=None):
-        signal = reconstruct_signal(self.sols, self.param_per_c)
-        drawer.draw_result(self.signal, signal, self.sols, self.param_per_c, plot=plot, save=save_path, x_values=self.x_values)
+    # def plot(self, plot=True, save_path=None):
+    #     signal = reconstruct_signal(self.sols, self.param_per_c)
+    #     drawer.draw_result(self.signal, signal, self.sols, self.param_per_c, plot=plot, save=save_path, x_values=self.x_values)
 
 
-def reconstruct_signal(sols, phaseB_perCluster):
-    reconstructed = []
-    for sol in sols:
-        reconstructed_signal = sum(phaseB_perCluster[i] * sol[i] for i in range(len(sol)))
-        reconstructed.append(reconstructed_signal)
-    return np.array(reconstructed)
+# def reconstruct_signal(sols, phaseB_perCluster):
+#     reconstructed = []
+#     for sol in sols:
+#         reconstructed_signal = sum(phaseB_perCluster[i] * sol[i] for i in range(len(sol)))
+#         reconstructed.append(reconstructed_signal)
+#     return np.array(reconstructed)
 
 
 from pulp import LpProblem, LpMinimize, LpVariable, lpSum, PULP_CBC_CMD, value
