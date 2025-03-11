@@ -14,6 +14,7 @@ class Fool:
         self.monotype_event, idx_monotype_event, self.other_event = extract_monotype_events(event_all)
         feature, _ = compute_features(self.monotype_event, drought)
         self.feature_backup = feature
+        self.feature = feature
         
         if normal:
             self.feature = z_score(feature)
