@@ -11,7 +11,7 @@ def auto_compose(composer, output_prefix, **params):
     params: (start_idx, end_idx, plot)
     '''
     max_num = len(composer.fool.other_event)
-    cluster_num = composer.param_per_c.shape[0]
+    cluster_num = len(composer.param_per_c)
     error  = []
     df_pred = [pd.DataFrame({'UTC Time':[], 'workingPower':[]}) for i in range(cluster_num)]
 
@@ -21,9 +21,14 @@ def auto_compose(composer, output_prefix, **params):
     plot = params.get('plot', False)
     total_start = time.time()
 
+    composer.split_events(threshold=params.get('threshold',3))
+    composer.set_param(param=params.get("param", "default"))
+    composer.merge_events()
     for i in range(start_idx,end_idx):
         start = time.time()
-        _, err = composer.compose(index=i)
+        if i<len(composer.events):
+            event = composer.events[i]
+            _, err = composer.compose(event)
         if plot:
             composer.plot()
         err = np.mean(err)
@@ -35,21 +40,11 @@ def auto_compose(composer, output_prefix, **params):
             df_pred[j] = pd.concat([df_pred[j], signal]).drop_duplicates(subset='UTC Time')
         end = time.time()
         period = end - start
-        minute = period // 60
-        second = period % 60
-        if minute == 0:
-            print(f"--{i+1}/{max_num}--err:{err:.3f}--time:{second:.3f}s--")
-        else:
-            print(f"--{i+1}/{max_num}--err:{err:.3f}--time:{minute}m{second:.3f}s--")
+        print(f"--{i+1}/{max_num}--err:{err:.3f}--time:{period:.3f}s--")
+
     total_end = time.time()
     mean_err = np.mean(error)
-    period = total_end - total_start
-    minute = period // 60
-    second = period % 60
-    if minute == 0:
-        print(f"==total:{max_num}==total me:{mean_err:.3f}==total time:{second:.3f}s==")
-    else:
-        print(f"======total:{max_num}==total me:{mean_err:.3f}==total time:{minute}m{second:.3f}s======")
+    print(f"---total:{max_num}--total mean err:{mean_err:.3f}--total time:{total_end-total_start:.3f}s---")
 
     # 确保目标目录存在
     output_dir = os.path.dirname(output_prefix)
@@ -76,61 +71,65 @@ class Composer():
             self.fool.feature_backup["Cluster"] = y_pred
         self.param = params.get("param", None)
         print('composer init.')
-        
-    def set_param(self, param, fit=False, **params):
+
+    def split_events(self,threshold=3):
+        self.events=[]
+        df=self.fool.feature_backup
+        if df.empty:
+            return
+        s = df.index[0]
+        partition_events = []
+
+        for i in range(1, len(df)):
+            current=df['Power'][i]
+            prev=df['Power'][i-1]
+            if abs(current-prev)>threshold:
+                e=df.index[i]
+                partition_events.append((s, e))
+                s=e
+        if s<df.index[-1]:
+            partition_events.append((s,df.index[-1]))
+        self.events = partition_events
+
+    def set_param(self, param, fit=True, **params):
         self.param = param
         feature_param = CONST.param_feature_dict[self.param][1]
-        
-        # 获取每个簇的参数均值和簇大小
-        clusters = self.fool.feature_backup.groupby('Cluster')[feature_param].agg(['mean', 'size'])
-        self.param_per_c = clusters['mean'].values
-        cluster_sizes = clusters['size'].values
-        print("Initial cluster means:", self.param_per_c)
-        print("-" * 10)
-        
-        if self.param == "realP_B":
-            self.param_per_c /= 3
-        
-        if fit:
-            print("fit=True")
-            thres = params.get("threshold", 3 if self.param != "realP_B" else 1)
+        self.param_per_c=[]
+        current_signals=[]
+        for (s,e) in self.events:
+            event_data = self.fool.feature_backup[s:e]
+            clusters=event_data.groupby('Cluster')[feature_param].mean()
+            self.param_per_c.append(clusters.values)
+            if len(current_signals) == 0:
+                current_signals.append(clusters.values)
+        self.current_signals = current_signals
 
-            # 进行簇合并迭代
-            while len(self.param_per_c) > 1:
-                print("Number of clusters:", len(self.param_per_c))
-                
-                # 计算所有簇之间的距离
-                dif = np.abs(self.param_per_c[:, np.newaxis] - self.param_per_c)
-                np.fill_diagonal(dif, np.inf)
-                
-                # 找到最小距离及其索引
-                min_dist = np.min(dif)
-                idx1, idx2 = np.unravel_index(np.argmin(dif), dif.shape)
-                
-                if min_dist < thres:
-                    print(f"Merging clusters {idx1} and {idx2} with distance {min_dist}")
-                    
-                    # 根据簇内点的数量对两个簇进行加权平均
-                    total_size = cluster_sizes[idx1] + cluster_sizes[idx2]
-                    new_mean = (self.param_per_c[idx1] * cluster_sizes[idx1] + 
-                                self.param_per_c[idx2] * cluster_sizes[idx2]) / total_size
-                    
-                    # 更新簇均值和簇大小
-                    self.param_per_c[idx1] = new_mean
-                    cluster_sizes[idx1] = total_size
-                    
-                    # 删除合并后的第二个簇
-                    self.param_per_c = np.delete(self.param_per_c, idx2, axis=0)
-                    cluster_sizes = np.delete(cluster_sizes, idx2, axis=0)
-                else:
-                    break
-                if self.param_per_c.shape[0] < 2:
-                    self.skip = True
-        print("Final cluster means:", self.param_per_c)
-        print("-" * 10)
-        return self
 
-    
+    def merge_events(self):
+        from scipy.spatial.distance import cdist
+        count_signals={}
+        trend_history=[]
+        current_signals=self.current_signals.copy()
+        for i in range(1, len(self.param_per_c)):
+            prev_param=self.param_per_c[i - 1]
+            curr_param=self.param_per_c[i]
+            delta=curr_param.mean()-prev_param.mean()
+            if delta>0:
+                distances=cdist([curr_param], self.param_per_c, 'euclidean')
+                n=np.argmin(distances)
+                count_signals[n] = count_signals.get(n, 0) + 1
+                current_signals.append(curr_param)
+            elif delta<0:
+                valid_signals=[s for s in current_signals if s.mean()>0]
+                if valid_signals:
+                    distances=cdist([curr_param], valid_signals, 'euclidean')
+                    n=np.argmin(distances)
+                    count_signals[n]=count_signals.get(n, 0)-1
+                    current_signals.pop(n)
+            trend_history.append(count_signals.copy())
+
+        self.trend_changes=trend_history
+
     def set_reducer(self, reducer, reducer_params={}):
         self.reducer = reduction(reducer)(**reducer_params)
         self.reducer_params = reducer_params
@@ -155,20 +154,19 @@ class Composer():
         n_clusters = len(self.sols[0])
         sols = np.array(self.sols)
         sols = sols * np.array(self.param_per_c.reshape(1,n_clusters))
-        sols = sols.T
         self.pred_signal = sols
     
-    # def plot(self, plot=True, save_path=None):
-    #     signal = reconstruct_signal(self.sols, self.param_per_c)
-    #     drawer.draw_result(self.signal, signal, self.sols, self.param_per_c, plot=plot, save=save_path, x_values=self.x_values)
+    def plot(self, plot=True, save_path=None):
+        signal = reconstruct_signal(self.sols, self.param_per_c)
+        drawer.draw_result(self.signal, signal, self.sols, self.param_per_c, plot=plot, save=save_path, x_values=self.x_values)
 
 
-# def reconstruct_signal(sols, phaseB_perCluster):
-#     reconstructed = []
-#     for sol in sols:
-#         reconstructed_signal = sum(phaseB_perCluster[i] * sol[i] for i in range(len(sol)))
-#         reconstructed.append(reconstructed_signal)
-#     return np.array(reconstructed)
+def reconstruct_signal(sols, phaseB_perCluster):
+    reconstructed = []
+    for sol in sols:
+        reconstructed_signal = sum(phaseB_perCluster[i] * sol[i] for i in range(len(sol)))
+        reconstructed.append(reconstructed_signal)
+    return np.array(reconstructed)
 
 
 from pulp import LpProblem, LpMinimize, LpVariable, lpSum, PULP_CBC_CMD, value
