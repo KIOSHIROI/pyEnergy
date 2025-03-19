@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 from pyEnergy import CONST, drawer
 from pyEnergy.composition.reducer import reduction
-from pulp import LpProblem, LpMinimize, LpVariable, lpSum, value, PULP_CBC_CMD
 import os  
 
 def auto_compose(composer, output_prefix, **params):
@@ -21,14 +20,16 @@ def auto_compose(composer, output_prefix, **params):
     plot = params.get('plot', False)
     total_start = time.time()
 
-    composer.split_events(threshold=params.get('threshold',3))
-    composer.set_param(param=params.get("param", "default"))
-    composer.merge_events()
-    for i in range(start_idx,end_idx):
+    composer.split_blocks(threshold=params.get('threshold', 3))
+    composer.set_param(param=params.get("param", "realP_B"), fit=params.get("fit", True))
+    composer.compos()
+    for i in range(start_idx, end_idx):
         start = time.time()
-        if i<len(composer.events):
+        if i < len(composer.events):
             event = composer.events[i]
-            _, err = composer.compose(event)
+            composer.signal = composer.fool.feature_backup.loc[event[0]:event[1], composer.param]
+            composer.x_values = composer.signal.index
+            _, err = composer.compose()  
         if plot:
             composer.plot()
         err = np.mean(err)
@@ -72,21 +73,22 @@ class Composer():
         self.param = params.get("param", None)
         print('composer init.')
 
-    def split_events(self,threshold=3):
+    def split_blocks(self,threshold=3):
         self.events=[]
         df=self.fool.feature_backup
         if df.empty:
             return
         s = df.index[0]
         partition_events = []
-
+        power_feature = self.fool.feature_backup.loc[:, CONST.feature_info[1]].to_numpy()
         for i in range(1, len(df)):
-            current=df['Power'][i]
-            prev=df['Power'][i-1]
-            if abs(current-prev)>threshold:
-                e=df.index[i]
+            print(i, len(df) )
+            current = power_feature[i]
+            prev = power_feature[i-1]
+            if abs(current - prev)>threshold:
+                e = df.index[i]
                 partition_events.append((s, e))
-                s=e
+                s = e
         if s<df.index[-1]:
             partition_events.append((s,df.index[-1]))
         self.events = partition_events
@@ -94,41 +96,43 @@ class Composer():
     def set_param(self, param, fit=True, **params):
         self.param = param
         feature_param = CONST.param_feature_dict[self.param][1]
-        self.param_per_c=[]
-        current_signals=[]
-        for (s,e) in self.events:
+        self.param_per_c = []
+        current_signals = []
+        for (s, e) in self.events:
             event_data = self.fool.feature_backup[s:e]
-            clusters=event_data.groupby('Cluster')[feature_param].mean()
-            self.param_per_c.append(clusters.values)
+            event_mean = event_data[feature_param].mean()
+            self.param_per_c.append(event_mean)
             if len(current_signals) == 0:
-                current_signals.append(clusters.values)
+                current_signals.append(event_mean)
         self.current_signals = current_signals
 
 
-    def merge_events(self):
+    def compos(self):
         from scipy.spatial.distance import cdist
-        count_signals={}
-        trend_history=[]
-        current_signals=self.current_signals.copy()
-        for i in range(1, len(self.param_per_c)):
-            prev_param=self.param_per_c[i - 1]
-            curr_param=self.param_per_c[i]
-            delta=curr_param.mean()-prev_param.mean()
-            if delta>0:
-                distances=cdist([curr_param], self.param_per_c, 'euclidean')
-                n=np.argmin(distances)
+        count_signals = {}
+        trend_history = []
+        current_signals = self.current_signals.copy()
+        param_per_c_padded = np.array(self.param_per_c).reshape(-1, 1) 
+        
+        for i in range(1, len(param_per_c_padded)):
+            prev_param = param_per_c_padded[i - 1]
+            curr_param = param_per_c_padded[i]
+            delta = curr_param - prev_param
+            if delta > 0:
+                distances = cdist([curr_param], param_per_c_padded, 'euclidean')
+                n = np.argmin(distances)
                 count_signals[n] = count_signals.get(n, 0) + 1
                 current_signals.append(curr_param)
-            elif delta<0:
-                valid_signals=[s for s in current_signals if s.mean()>0]
+            elif delta < 0:
+                valid_signals = [s for s in current_signals if s > 0]
                 if valid_signals:
-                    distances=cdist([curr_param], valid_signals, 'euclidean')
-                    n=np.argmin(distances)
-                    count_signals[n]=count_signals.get(n, 0)-1
+                    distances = cdist([curr_param], np.array(valid_signals).reshape(-1, 1), 'euclidean')
+                    n = np.argmin(distances)
+                    count_signals[n] = count_signals.get(n, 0) - 1
                     current_signals.pop(n)
             trend_history.append(count_signals.copy())
-
-        self.trend_changes=trend_history
+    
+        self.trend_changes = trend_history
 
     def set_reducer(self, reducer, reducer_params={}):
         self.reducer = reduction(reducer)(**reducer_params)
@@ -144,8 +148,6 @@ class Composer():
         self.x_values = self.signal.index
         if self.reducer is not None:
             self.signal, _ = self.reducer.reduce(signal=self.signal, **self.reducer_params)
-                
-
         self.sols, errors = compos(self.param_per_c, self.signal)
         self.get_pred_signal()
         return self.sols, errors
@@ -167,47 +169,3 @@ def reconstruct_signal(sols, phaseB_perCluster):
         reconstructed_signal = sum(phaseB_perCluster[i] * sol[i] for i in range(len(sol)))
         reconstructed.append(reconstructed_signal)
     return np.array(reconstructed)
-
-
-from pulp import LpProblem, LpMinimize, LpVariable, lpSum, PULP_CBC_CMD, value
-import numpy as np
-from joblib import Parallel, delayed  # 用于并行处理
-
-def compos(realP_perCluster, signal_reduced, low_bound=0, up_bound=8):
-    sols = []
-    errors = []
-    n_clusters = len(realP_perCluster)
-    
-    # 预先计算求和表达式
-    sum_realP_perCluster = np.sum(realP_perCluster, axis=0)
-    
-    # 并行处理信号
-    results = Parallel(n_jobs=-1)(delayed(process_signal)(realP_perCluster, signal, sum_realP_perCluster, low_bound, up_bound) for signal in signal_reduced)
-    
-    for result in results:
-        sols.append(result[0])
-        errors.append(result[1])
-    
-    return sols, errors
-
-def process_signal(realP_perCluster, signal, sum_realP_perCluster, low_bound, up_bound):
-    prob = LpProblem("Signal_Decomposition", LpMinimize)
-    
-    # 定义优化变量
-    x = LpVariable.dicts("x", range(len(realP_perCluster)), lowBound=low_bound, upBound=up_bound, cat='Integer')
-    error = LpVariable('error', lowBound=0)
-    
-    # 目标函数：最小化误差和 max_x
-    prob += error - lpSum(x)
-    
-    # 添加约束：线性组合的值必须等于信号加上误差
-    prob += lpSum(realP_perCluster[j] * x[j] for j in range(len(realP_perCluster))) + error >= signal
-    prob += lpSum(realP_perCluster[j] * x[j] for j in range(len(realP_perCluster))) - error <= signal
-
-    # 求解问题
-    prob.solve(PULP_CBC_CMD(msg=False))
-    
-    # 保存最优解和误差
-    solution = [int(value(x[i])) for i in range(len(realP_perCluster))]
-    error_value = value(error)
-    return solution, error_value
