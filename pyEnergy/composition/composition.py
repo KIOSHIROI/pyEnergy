@@ -159,12 +159,13 @@ class Composer():
 
 
 
-    def split_blocks(self, index=0, threshold=3):
+    def split_blocks(self, index=0, threshold=3, window_size=5):
         '''根据索引处理单个事件并进行分块
         
         Args:
             index: int，事件索引，默认为0
             threshold: float，分块阈值，默认为3
+            window_size: int，平滑窗口大小，默认为5
         '''
         other_events = self.fool.other_event
         if not other_events or index >= len(other_events):
@@ -186,7 +187,10 @@ class Composer():
         
         s = df.index[0]
         partition_events = []
-        power_feature = df.loc[:, self.param].to_numpy()
+        # 对功率特征进行移动平均平滑处理
+        power_series = df.loc[:, self.param]
+        smoothed_power = power_series.rolling(window=window_size, center=True, min_periods=1).mean()
+        power_feature = smoothed_power.to_numpy()
         for i in range(1, len(df)):
             current = power_feature[i]
             prev = power_feature[i-1]
