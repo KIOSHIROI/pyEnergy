@@ -75,7 +75,7 @@ def import_transformer_data(data_files):
                      names=param_names,
                      index_col='T',
                      parse_dates=['T'],
-                     date_format=date_parser_str,  # 使用date_format代替date_parser
+                     date_parser=lambda x: pd.to_datetime(x, format=date_parser_str),
                      usecols=range(0, 26))
 
     idx_duplicate = df.index.duplicated(keep='first')
