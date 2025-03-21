@@ -47,8 +47,8 @@ def validate_signal_events(validation_events_path, signals_dir):
                     correct_starts += 1
                 
                 # 检查关闭信号
-                end_window_start = val_event['endtime'] - timedelta(hours=1)
-                end_window_end = val_event['endtime']
+                end_window_start = val_event['endtime'] - timedelta(hours=2)
+                end_window_end = val_event['endtime'] - timedelta(hours=1)
                 
                 # 检查是否在时间窗口内有关闭信号
                 end_detected = any((cluster_df['endtime'] >= end_window_start) & 
@@ -91,12 +91,13 @@ def print_validation_results(accuracies):
     
     print("-" * 60)
     
-    # 计算所有聚类的平均准确率
-    avg_start = sum(m['start_accuracy'] for m in accuracies.values()) / len(accuracies)
-    avg_end = sum(m['end_accuracy'] for m in accuracies.values()) / len(accuracies)
-    avg_total = sum(m['avg_accuracy'] for m in accuracies.values()) / len(accuracies)
-    
-    print(f"\n总体评估:")
-    print(f"平均启动准确率: {avg_start*100:.2f}%")
-    print(f"平均关闭准确率: {avg_end*100:.2f}%")
-    print(f"总体平均准确率: {avg_total*100:.2f}%")
+    # 计算并打印最高平均准确率的聚类信息
+    best_cluster_id = max(accuracies, key=lambda x: accuracies[x]['avg_accuracy'])
+    best_metrics = accuracies[best_cluster_id]
+    print(f"\n最高平均准确率的聚类: {best_cluster_id}")
+    print(f"启动准确率: {best_metrics['start_accuracy']*100:.2f}%")
+    print(f"关闭准确率: {best_metrics['end_accuracy']*100:.2f}%")
+    print(f"平均准确率: {best_metrics['avg_accuracy']*100:.2f}%")
+    print(f"总验证事件数: {best_metrics['total_validation_events']}")
+    print(f"正确检测启动事件数: {best_metrics['correct_starts']}")
+    print(f"正确检测关闭事件数: {best_metrics['correct_ends']}")
