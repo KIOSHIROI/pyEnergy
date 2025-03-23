@@ -98,7 +98,8 @@ class Gaussian(Model):
         print(f"最佳模型参数: n_components={self.best_model.n_components}, "
               f"covariance_type={self.best_model.covariance_type}")
         
-        return self.y_pred
+        n_clusters = len(np.unique(self.y_pred))
+        return self.y_pred, self.score, n_clusters
     
     def predict(self, X):
         if self.best_model is None:

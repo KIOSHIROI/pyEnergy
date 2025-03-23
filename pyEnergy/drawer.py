@@ -4,45 +4,45 @@ import numpy as np
 import seaborn as sns
 import pyEnergy.CONST as CONST
 import matplotlib.dates as mdates
+import pyEnergy.compute as cm
+# def draw_3D_scatter(feature_standardized, feature_info):
+#     df = feature_standardized.iloc[:, :3] 
+#     fig = plt.figure()
+#     ax = fig.add_subplot(111, projection='3d')
 
-def draw_3D_scatter(feature_standardized, feature_info):
-    df = feature_standardized.iloc[:, :3] 
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+#     ax.scatter(df[feature_info[0]], df[feature_info[1]], df[feature_info[2]])
 
-    ax.scatter(df[feature_info[0]], df[feature_info[1]], df[feature_info[2]])
-
-    ax.set_xlabel(feature_info[0])
-    ax.set_ylabel(feature_info[1])
-    ax.set_zlabel(feature_info[2])
+#     ax.set_xlabel(feature_info[0])
+#     ax.set_ylabel(feature_info[1])
+#     ax.set_zlabel(feature_info[2])
  
-    ax.set_title('3D Scatter Plot of the First Three Features')
+#     ax.set_title('3D Scatter Plot of the First Three Features')
 
-    plt.show()
+#     plt.show()
 
-def draw_feature_hist(feature_standardized, feature_info):
-    for feature in feature_info:
-        if feature in feature_standardized.columns:
-            if feature_standardized[feature].dtype != 'float64' and feature_standardized[feature].dtype != 'int64':
-                feature_standardized[feature] = pd.to_numeric(feature_standardized[feature], errors='coerce')
+# def draw_feature_hist(feature_standardized, feature_info):
+#     for feature in feature_info:
+#         if feature in feature_standardized.columns:
+#             if feature_standardized[feature].dtype != 'float64' and feature_standardized[feature].dtype != 'int64':
+#                 feature_standardized[feature] = pd.to_numeric(feature_standardized[feature], errors='coerce')
                 
-            feature_standardized[feature].hist(bins=30, edgecolor='black')
-            plt.title(feature)
-            plt.xlabel("Value")
-            plt.ylabel("Frequency")
-            plt.show()
-        else:
-            print(f"Column {feature} does not exist in DataFrame.")
+#             feature_standardized[feature].hist(bins=30, edgecolor='black')
+#             plt.title(feature)
+#             plt.xlabel("Value")
+#             plt.ylabel("Frequency")
+#             plt.show()
+#         else:
+#             print(f"Column {feature} does not exist in DataFrame.")
 
-def draw_corr(feature):
-    #协方差分析
-    corr = feature.corr()
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
-    plt.tight_layout()
-    plt.show()
+# def draw_corr(feature):
+#     #协方差分析
+#     corr = feature.corr()
+#     plt.figure(figsize=(10, 8))
+#     sns.heatmap(corr, annot=True, cmap='coolwarm', vmin=-1, vmax=1)
+#     plt.tight_layout()
+#     plt.show()
 
-
+#! 绘制各个单一事件信号(不需要改)
 def draw_signal(data, param_str="curnt_B", ax=None):
     if ax == None:
         fig, ax1 = plt.subplots()
@@ -62,7 +62,8 @@ def draw_signal(data, param_str="curnt_B", ax=None):
     if ax == None:
         plt.show()
 
-def draw_signal_series(signal, ax=None):
+# ?
+def draw_signal_series(signal, ax=None, plot=True):
     if ax == None:
         fig, ax1 = plt.subplots()
     ax1.fill_between(signal.index, 0, signal, color='#6be6d0', alpha=0.7, edgecolor='#717373', linewidth=1)
@@ -75,9 +76,11 @@ def draw_signal_series(signal, ax=None):
     ax1.set_xticklabels([dt.strftime('%H:%M') for dt in date_ticks[::tick_interval]], rotation=30)
     ax1.set_ylim((0, signal.max()+0.1*(signal.max()-signal.min())))
     ax1.set_title(date_ticks[::tick_interval][0].strftime('%Y-%m-%d'), fontdict={"fontsize": 20})
-    if ax == None:
+    if ax == None and plot == True:
         plt.show()
+    return fig
 
+#!（不需要改）
 def draw_silhouette_scores(max_clusters, silhouette_scores):
     plt.figure(figsize=(10, 6))
     plt.plot(range(2, max_clusters + 1), silhouette_scores, marker='o')
@@ -88,31 +91,31 @@ def draw_silhouette_scores(max_clusters, silhouette_scores):
     plt.show()
 
 
-def draw_parallel_coordinates(data, y_pred, colormap="Set1"):
-    data = data.copy()
-    data["Class"] = y_pred
-    plt.figure(figsize=(10, 6))  # 设置图表大小
-    ax = pd.plotting.parallel_coordinates(data, "Class", colormap=colormap)
+# def draw_parallel_coordinates(data, y_pred, colormap="Set1"):
+#     data = data.copy()
+#     data["Class"] = y_pred
+#     plt.figure(figsize=(10, 6))  # 设置图表大小
+#     ax = pd.plotting.parallel_coordinates(data, "Class", colormap=colormap)
     
-    # 设置x轴标签旋转45度，避免重叠
-    plt.xticks(rotation=45, fontsize=12)  # 可以调整字体大小
-    plt.title('Parallel Coordinates Plot', fontsize=16)  # 设置标题和字体大小
+#     # 设置x轴标签旋转45度，避免重叠
+#     plt.xticks(rotation=45, fontsize=12)  # 可以调整字体大小
+#     plt.title('Parallel Coordinates Plot', fontsize=16)  # 设置标题和字体大小
     
-    # 添加网格线
-    ax.yaxis.grid(True, linestyle='--', linewidth=0.5, color='gray', which='major')
+#     # 添加网格线
+#     ax.yaxis.grid(True, linestyle='--', linewidth=0.5, color='gray', which='major')
     
-    # 设置图例位置和字体大小
-    ax.legend(loc='upper right', fontsize=16)
+#     # 设置图例位置和字体大小
+#     ax.legend(loc='upper right', fontsize=16)
     
-    # 调整透明度
-    for line in ax.get_lines():
-        line.set_alpha(0.65)
-        line.set_linewidth(0.65)
+#     # 调整透明度
+#     for line in ax.get_lines():
+#         line.set_alpha(0.65)
+#         line.set_linewidth(0.65)
     
-    plt.tight_layout()  # 自动调整子图参数，使之填充整个图像区域
-    plt.show()
+#     plt.tight_layout()  # 自动调整子图参数，使之填充整个图像区域
+#     plt.show()
 
-
+# ? 重构信号（把_event.csv改成时间序列、改一下这个画图）
 def plot_continuous_lines(original_signals, reconstruct_signals, x_values=None):
     fig, ax = plt.subplots(1,1, figsize=(10, 3))
     if x_values is None:
@@ -142,6 +145,7 @@ def plot_continuous_lines(original_signals, reconstruct_signals, x_values=None):
     ax.legend()
     return fig
 
+# ?
 def plot_div_signal(sols, paramPerCluster, color='blue', x_values=None):
     n_clusters = len(sols[0])
     sols = np.array(sols)
@@ -158,19 +162,8 @@ def plot_div_signal(sols, paramPerCluster, color='blue', x_values=None):
         for i, ax in enumerate(axes):
             ax.plot(x_values, sols[i], color=color)
     return fig
-
-def draw_result(signals, reconstruct_signals,  sols, params_perCluster, x_values=None, save=None, plot=True):
-    clfig = plot_continuous_lines(signals, reconstruct_signals, x_values=x_values)
-    dvfig = plot_div_signal(sols, params_perCluster, x_values=x_values)
-    stack = plot_stacked(sols, params_perCluster, x_values=x_values)
-    if plot:
-        plt.show()
-    if save:
-        clfig.savefig(os.path.join(save, "CL.png"))
-        dvfig.savefig(os.path.join(save, "DV.png"))
-        stack.savefig(os.path.join(save, "stack.png"))
         
-
+# ?
 def plot_stacked(sols, paramPerCluster, x_values):
     n_clusters = len(sols[0])
     sols = np.array(sols)
@@ -193,36 +186,58 @@ def plot_stacked(sols, paramPerCluster, x_values):
     
     return fig
 
-def plot_signal(df_list, labels = None):
+# ?()
+def draw_result(signals, reconstruct_signals,  sols, params_perCluster, x_values=None, save=None, plot=True):
+    clfig = plot_continuous_lines(signals, reconstruct_signals, x_values=x_values)
+    dvfig = plot_div_signal(sols, params_perCluster, x_values=x_values)
+    stack = plot_stacked(sols, params_perCluster, x_values=x_values)
+    if plot:
+        plt.show()
+    if save:
+        clfig.savefig(os.path.join(save, "CL.png"))
+        dvfig.savefig(os.path.join(save, "DV.png"))
+        stack.savefig(os.path.join(save, "stack.png"))
+
+#!(不需要改)
+def plot_signal(df_list, labels = None, orignal=False):
+    # 读取验证集数据
+    orignal_data = pd.read_csv(r"data/ChangErZhai-40-139079-values 20180101-20181031.csv")
+    validation_data = cm.interpolation_val()
+    validation_data = validation_data.sort_index()
+    validation_data = validation_data[['workingPower']]
+
     datetimeRange_start = CONST.datetimeRange_start
     datetimeRange_end = CONST.datetimeRange_end
     fig, axes = plt.subplots(4,2, figsize=(10,8))
     ax = axes.flatten()
-    for n,  df in enumerate(df_list):
-        # 遍历日期时间范围
-        for ii in range(len(datetimeRange_end)):
-            a = ax[ii]
-
-            # 绘制Hengyuan数据的面积图
-            a.plot(df, alpha=0.6, label=labels[n] if labels else None)
-
-            # 设置图形属性
+    
     for ii in range(len(datetimeRange_end)):
         a = ax[ii]
+        # 绘制验证集数据的堆叠图
+        mask = (validation_data.index >= datetimeRange_start[ii]) & (validation_data.index <= datetimeRange_end[ii])
+        val_data = validation_data[mask]['workingPower']
+        a.fill_between(val_data.index, 0, val_data, color='#222222', alpha=0.9, label='Validation Data')
+        
+        # 绘制其他数据的线图
+        for n, df in enumerate(df_list):
+            mask = (df.index >= datetimeRange_start[ii]) & (df.index <= datetimeRange_end[ii])
+            a.plot(df[mask], alpha=0.5, label=labels[n] if labels else None)
+
+        # 设置图形属性
         a.set_xlim([datetimeRange_start[ii], datetimeRange_end[ii]])
         a.set_ylabel('Power [kW]')
-        # a.grid(True)
+        a.grid(True, alpha=0.3)
         a.tick_params(axis="x", labelrotation=30)
         # 设置x轴的刻度为时间戳
         a.xaxis.set_major_locator(mdates.AutoDateLocator())
         a.xaxis.set_major_formatter(mdates.DateFormatter('%Hh/%m/%d/'))
 
     if labels:
-        a.legend()
+        ax[0].legend()
     plt.tight_layout()
 
-def plot_err(path):
-    err = pd.read_csv(path)
-    plt.plot(err.loc[:, " mean_error"], label="".join(path.split("/")[-1].split('.')[:-1]))
-    plt.legend()
+# def plot_err(path):
+#     err = pd.read_csv(path)
+#     plt.plot(err.loc[:, " mean_error"], label="".join(path.split("/")[-1].split('.')[:-1]))
+#     plt.legend()
     

@@ -37,5 +37,5 @@ htmlcov/
 # Project specific
 fool/REAL_POWER_FEATURE_FOOL
 output/
-data/
+# data/
 *.m

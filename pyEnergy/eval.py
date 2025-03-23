@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from matplotlib import dates as mdates
 import pyEnergy.drawer as dw
 
 def setup_logging():
@@ -332,6 +333,81 @@ def evaluate_specific_output(output_prefix, img_dir, cluster_params=None):
         return
 
     logging.info("评估完成\n" + "-"*50)
+
+def visualize_well_operations(events_dir):
+    """可视化各机井类型的运行情况
+    
+    Args:
+        events_dir (str): 包含各聚类事件文件的目录路径
+    """
+    import os
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    
+    # 设置中文字体
+    plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'Microsoft YaHei', 'SimHei', 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
+    
+    # 获取所有聚类事件文件
+    event_files = [f for f in os.listdir(events_dir) if f.startswith('events_cluster_') and f.endswith('.csv')]
+    n_clusters = len(event_files)
+    
+    if n_clusters == 0:
+        logging.warning(f"未找到聚类事件文件 - {events_dir}")
+        return
+    
+    # 创建子图
+    fig, axes = plt.subplots(n_clusters, 1, figsize=(15, 3*n_clusters), sharex=True)
+    if n_clusters == 1:
+        axes = [axes]
+    
+    # 设置颜色映射
+    colors = plt.cm.Set3(np.linspace(0, 1, 12))  # 使用Set3色板，最多支持12种颜色
+    
+    # 获取所有事件的时间范围
+    all_times = []
+    for file in event_files:
+        df = pd.read_csv(os.path.join(events_dir, file))
+        all_times.extend(pd.to_datetime(df['starttime']))
+        all_times.extend(pd.to_datetime(df['endtime']))
+    
+    time_range = [min(all_times), max(all_times)]
+    
+    # 处理每个聚类的事件
+    for i, file in enumerate(sorted(event_files)):
+        cluster_id = int(file.split('_')[2].split('.')[0])
+        df = pd.read_csv(os.path.join(events_dir, file))
+        
+        # 转换时间列
+        df['starttime'] = pd.to_datetime(df['starttime'])
+        df['endtime'] = pd.to_datetime(df['endtime'])
+        
+        # 绘制事件区块
+        ax = axes[i]
+        for _, event in df.iterrows():
+            # 计算运行机井数量
+            wells = abs(event['aggNum']) if 'aggNum' in df.columns else 1
+            # 绘制区块
+            ax.fill_between([event['starttime'], event['endtime']], 
+                          [wells, wells],
+                          color=colors[i % len(colors)],
+                          alpha=0.6)
+        
+        # 设置y轴范围和标签
+        ax.set_ylim(0, max(df['aggNum'].max() if 'aggNum' in df.columns else 1, 1) + 0.5)
+        ax.set_ylabel(f'Cluster {cluster_id}\nActive Wells', fontsize=10)
+        ax.grid(True, linestyle='--', alpha=0.7)
+        
+        # 设置x轴格式
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d %H:%M'))
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45)
+    
+    # 设置图表标题和布局
+    fig.suptitle('Well Operations by Cluster', fontsize=14)
+    plt.xlim(time_range)
+    plt.tight_layout()
+    
+    return fig
 
 def find_validation_set_events(file_path):
     # 读取CSV文件

@@ -4,6 +4,7 @@ import pandas as pd
 from pyEnergy import CONST, drawer
 from pyEnergy.composition.reducer import reduction
 import os  
+from scipy.spatial.distance import cdist
 
 def auto_compose(composer, output_prefix, **params):
     '''
@@ -39,78 +40,22 @@ def auto_compose(composer, output_prefix, **params):
     print(f"开始负荷分解，输出文件前缀: {output_prefix}")
     total_start = time.time()
 
-    composer.set_param(param=params.get("param", "realP_B"), fit=params.get("fit", True))
     for i in range(start_idx, end_idx):
         start = time.time()
-        composer.split_blocks(index=i, threshold=params.get('threshold', 3)) # 分块
+        composer.split_blocks(index=i, threshold=params.get('threshold', 10)) # 分块
         composer.compos(index=i)
-        
-        # 根据trend_changes计算预测信号
-        # n_clusters = len(composer.param_per_c)
-        # composer.pred_signal = np.zeros((len(composer.trend_changes), n_clusters))
-        # for t, trend in enumerate(composer.trend_changes):
-        #     for cluster_idx in range(n_clusters):
-        #         composer.pred_signal[t, cluster_idx] = trend.get(cluster_idx, 0)
-        
-        # 计算误差
-        # event = composer.events[i]
-        # composer.signal = composer.fool.original_data.loc[event[0]:event[1], composer.param]
-        # composer.x_values = composer.signal.index
-        # actual_signal = composer.signal.values
-        # predicted_signal = np.sum(composer.pred_signal * composer.param_per_c.reshape(1, -1), axis=1)
-        # err = np.mean(np.abs(actual_signal - predicted_signal))
-        
-        # if plot:
-        #     composer.plot()
-
-        # err = np.mean(err)
-        # error.append(err)
-
-        # for j in range(cluster_num):
-        #     x = composer.x_values
-        #     signal = composer.pred_signal[j]
-        #     signal = pd.DataFrame(zip(x, signal), columns=["UTC Time", "workingPower"])
-        #     df_pred[j] = pd.concat([df_pred[j], signal]).drop_duplicates(subset='UTC Time')
         end = time.time()
         period = end - start
-        print(f"--{i+1}/{max_num}--time:{period:.3f}s--")
-
+        # print(f"--{i+1}/{max_num}--time:{period:.3f}s--")
+    composer.compos_monotype()
     total_end = time.time()
     # mean_err = np.mean(error)
-    print(f"---total:{max_num}--total time:{total_end-total_start:.3f}s---")
+    print(f"---total time:{total_end-total_start:.3f}s---")
 
     # 保存启动和关闭事件
     events_df = pd.DataFrame(composer.signal_events, columns=['recordId', 'clusterId', 'eventId', 'starttime', 'endtime', 'aggNum'])
     events_df.to_csv(output_prefix + "_events.csv", index=False)
 
-    # 保存分解结果
-    # compose_output(output_prefix, df_pred)
-
-
-# def compose_output(output_prefix, df_pred):
-#     # 确保输出目录存在
-#     output_dir = os.path.dirname(output_prefix)
-#     if not os.path.exists(output_dir):
-#         os.makedirs(output_dir, exist_ok=True)
-    
-#     # 写入预测信号文件
-#     for i in range(len(df_pred)):
-#         file_path = os.path.join(output_prefix, f"signal{i+1}of{len(df_pred)}.csv")
-#         df_pred[i].to_csv(file_path)
-    
-#     # 合并所有预测信号
-#     combined_signal = pd.DataFrame()
-#     for df in df_pred:
-#         if not df.empty:
-#             if combined_signal.empty:
-#                 combined_signal = df.copy()
-#             else:
-#                 combined_signal['workingPower'] += df['workingPower']
-    
-#     # 保存合并后的信号
-#     if not combined_signal.empty:
-#         file_path = os.path.join(output_prefix, "curnt_B.csv")
-#         combined_signal.to_csv(file_path, index=False)
         
         
 class Composer():
@@ -158,7 +103,6 @@ class Composer():
         self.param_per_c = clusters['mean'].values
 
 
-
     def split_blocks(self, index=0, threshold=3, window_size=5):
         '''根据索引处理单个事件并进行分块
         
@@ -182,8 +126,6 @@ class Composer():
         df = self.fool.original_data.iloc[start_idx:end_idx+1]
         if df.empty:
             raise ValueError(f"No data found for event at index {index}")
-
-
         
         s = df.index[0]
         partition_events = []
@@ -208,7 +150,7 @@ class Composer():
         Args:
             index: int，事件索引，默认为0
         '''
-        from scipy.spatial.distance import cdist
+        
         # 初始化变量
         # active_wells: 维护当前活跃的机井列表，每个元素是(聚类索引, 功率值, 启动时间)的元组
         # signal_events: 记录启动和关闭事件，每个元素是(clusterId, eventId, starttime, endtime, aggNum)的元组
@@ -270,6 +212,107 @@ class Composer():
             self.record_counter += 1
             self.signal_events.append((self.record_counter, cluster_idx, index, start_time, end_time, agg_num))
     
+    def compos_monotype(self, threshold=3, window_size=5):
+        """处理所有事件并进行单一类型的分块分析
+        
+        Args:
+            threshold: float，分块阈值，默认为3
+            window_size: int，平滑窗口大小，默认为5
+        """
+        other_events = self.fool.other_event
+        if not other_events:
+            raise ValueError("No events available")
+            
+        for event_idx, event in enumerate(other_events):
+            # 获取事件的时间范围
+            event_times = pd.to_datetime(event.index)
+            # 获取feature_backup的时间范围
+            feature_times = pd.to_datetime(self.fool.original_data.index)
+            # 找到最接近的时间点
+            start_idx = feature_times.searchsorted(event_times[0])
+            end_idx = feature_times.searchsorted(event_times[-1])
+            # 获取对应的数据
+            df = self.fool.original_data.iloc[start_idx:end_idx+1]
+            if df.empty:
+                continue
+            
+            s = df.index[0]
+            partition_events = []
+            # 对功率特征进行移动平均平滑处理
+            power_series = df.loc[:, self.param]
+            smoothed_power = power_series.rolling(window=window_size, center=True, min_periods=1).mean()
+            power_feature = smoothed_power.to_numpy()
+            
+            # 分块处理
+            for i in range(1, len(df)):
+                current = power_feature[i]
+                prev = power_feature[i-1]
+                if abs(current - prev) > threshold:
+                    e = df.index[i]
+                    partition_events.append((s, e))
+                    s = e
+            if s < df.index[-1]:
+                partition_events.append((s, df.index[-1]))
+                
+            # 如果没有分块，继续下一个事件
+            if not partition_events:
+                continue
+                
+            active_wells = []
+            count_signals = {}
+            
+            # 将每个聚类的参数值转换为列向量，用于计算欧氏距离
+            param_per_c_padded = np.array(self.param_per_c).reshape(-1, 1)
+            
+            # 计算每个数据块的均值
+            block_means = []
+            for start, end in partition_events:
+                block_data = df.loc[start:end, self.param]
+                block_means.append(block_data.mean())
+            
+            # 分析相邻数据块的差值
+            for i in range(len(block_means)-1):
+                curr_mean = block_means[i]
+                next_mean = block_means[i+1]
+                delta = next_mean - curr_mean
+                
+                if delta > 0:  # 新增机井
+                    # 计算当前信号与各聚类中心的欧氏距离
+                    distances = cdist([[delta]], param_per_c_padded, 'euclidean')
+                    # 找到最近的聚类
+                    cluster_idx = np.argmin(distances)
+                    # 记录机井启动
+                    start_time = partition_events[i][1]
+                    active_wells.append((cluster_idx, delta, start_time))
+                    # 更新信号计数
+                    count_signals[cluster_idx] = count_signals.get(cluster_idx, 0) + 1
+                    
+                elif delta < 0:  # 关闭机井
+                    if active_wells:
+                        # 计算与已启动机井的距离
+                        well_powers = np.array([w[1] for w in active_wells]).reshape(-1, 1)
+                        distances = cdist([[abs(delta)]], well_powers, 'euclidean')
+                        # 找到最近的机井
+                        well_idx = np.argmin(distances)
+                        cluster_idx, _, start_time = active_wells[well_idx]
+                        # 更新信号计数
+                        count_signals[cluster_idx] = count_signals.get(cluster_idx, 0) - 1
+                        # 记录事件
+                        end_time = partition_events[i][1]
+                        agg_num = count_signals[cluster_idx]
+                        self.record_counter += 1
+                        self.signal_events.append((self.record_counter, cluster_idx, event_idx, start_time, end_time, agg_num))
+                        # 移除关闭的机井
+                        active_wells.pop(well_idx)
+            
+            # 处理剩余活跃机井的关闭信号
+            for cluster_idx, power, start_time in active_wells:
+                count_signals[cluster_idx] = count_signals.get(cluster_idx, 0) - 1
+                # 记录事件
+                end_time = partition_events[-1][1]
+                agg_num = count_signals[cluster_idx]
+                self.record_counter += 1
+                self.signal_events.append((self.record_counter, cluster_idx, event_idx, start_time, end_time, agg_num))
 
     def set_reducer(self, reducer, reducer_params={}):
         '''
