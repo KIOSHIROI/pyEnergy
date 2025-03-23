@@ -145,7 +145,7 @@ def plot_continuous_lines(original_signals, reconstruct_signals, x_values=None):
     ax.legend()
     return fig
 
-# ?
+# ?（sols已废弃）
 def plot_div_signal(sols, paramPerCluster, color='blue', x_values=None):
     n_clusters = len(sols[0])
     sols = np.array(sols)
@@ -163,7 +163,7 @@ def plot_div_signal(sols, paramPerCluster, color='blue', x_values=None):
             ax.plot(x_values, sols[i], color=color)
     return fig
         
-# ?
+# ?(sols已废弃)
 def plot_stacked(sols, paramPerCluster, x_values):
     n_clusters = len(sols[0])
     sols = np.array(sols)
@@ -186,7 +186,7 @@ def plot_stacked(sols, paramPerCluster, x_values):
     
     return fig
 
-# ?()
+# ?(sols已废弃)
 def draw_result(signals, reconstruct_signals,  sols, params_perCluster, x_values=None, save=None, plot=True):
     clfig = plot_continuous_lines(signals, reconstruct_signals, x_values=x_values)
     dvfig = plot_div_signal(sols, params_perCluster, x_values=x_values)
